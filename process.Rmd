@@ -1,20 +1,145 @@
 ---
 title: "Using R for Cyclodextrin Affinity Prediction"
-output: html_notebook
+output: 
+  html_notebook:
+    theme: paper
+    toc: yes
+  html_document:
+    toc: yes
 ---
 
-Currently, this can only be used to predict for alpha- and beta-CD. Gamma-CD is still in the works. The value returned by the code is the change in Gibbs free energy (often abbreviated as dG of DelG) of guest-host complexation. 
+## Overview
+
+Currently, this can only be used to predict for alpha- and beta-CD (this doesn't mean it's *impossible* to model gamma-CD, but the model is still in the works). The value returned by the code is the change in Gibbs free energy (often abbreviated as dG of DelG) of guest-host complexation. 
 
 The code used to actually build the models can be found in the repository [wip-cactus](https://github.com/awqx/wip-cactus). Don't mind the name -- it's a leftover from early steps in the QSAR building process. 
 
-Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+## Setting up
+
+Make sure you have RStudio and R installed. Going to the main page for the GitHub repository, click the green button that says **Clone or Download** and sleect the option **Download ZIP**. Extract the files somewhere convenient, and open up the script `cdap.R`. You'll notice that some lines are commented out (i.e., they are preceded by a **#**) and will not run on their own. As you follow through this guide, uncomment these lines as necessary.
+
+The first executable line should be `getwd()`. This will print a filepath to the console -- make sure it's the filepath of the cdap folder. If not, use `setwd("example/example")` to set the working directory to the cdap folder. The next couple lines look something like `source("example.R")`. These will read functions and install the necessary R packages. 
 
 ```{r}
-plot(cars)
+# To run lines of code, highlight the section you want to run and either press
+# Ctrl + Enter or click the button in the upper right that says "Run"
+source("cactus.R")
+source("applicability.domain.R")
+source("qsar.R")
+
 ```
+
+## Structural files
+
+If you already have the structural files for the molecules you want to test, skip to [Chemical descriptors](#anchor)
+
+### Names
+
+First, the names of the guest molecules you want to evaluate have to be assigned to a vector. In the easiest scenario, you have only a couple of easily typable names. Assign these to the variable `guests`.
+
+```{r, eval = F}
+guests <- c("acetominophen", "triamcinolone", "dexamethasone")
+
+# If there's only one name you need, no need to put it into a vector
+guests <- "metformin"
+```
+
+If there are many molecules, it may be easier to use `read.csv`. Write or copy the molecule names into the first column of an Excel document under the header "guests". Save the file as guests.csv (in the cdap folder) and read it into R.
+
+```{r, eval = F}
+guests <- read.csv("guests.csv", header = T) %>% .$guests
+
+```
+
+### Structural files with CACTUS
+
+To get the 3D structure files, the names of the molecules have to be fed through the Chemical Identifier Resolver (CIR), essentially a search engine for molecules created by the National Cancer Institute's CADD Group. (CIR and a variety of other useful programs can be found at [CACTUS](https://cactus.nci.nih.gov/), the **CA**DD Group **C**hemoinformatics **T**ools and **U**ser **S**ervices.) 
+
+The function `download.cactus.results` both retrieves a molecule from CIR as well as outputs a data.frame indicating success or failure. The function is designed to only handle one name at a time, so multiple guests must be fed through `do.call` and `lapply`. At this step, it may take multiple tries to get the correct molecule, as some molecules are only searchable under certain names (e.g., you can use CIR with "Tylenol" but not "Actamin", despite both terms referring to acetominophen). Some more uncommon drugs may be absent from the database entirely. 
+
+```{r, eval = F}
+# Create a folder to hold the molecules
+dir.create("guests")
+
+# Download only a single guest molecule
+results.dwnld <- download.cactus.results(guests, path = "guests", 
+                                         chemical.format = "SDF")
+
+# Download multiple guest molecules
+results.dwnld <-
+  do.call(
+    rbind,
+    lapply(
+      guests,
+      download.cactus.results,
+      path = filepath,
+      chemical.format = "SDF"
+    )
+  ) 
+
+```
+
+Take a look at `results.dwnld` to see if any molecules failed to process. If some failed, try again using a chemical synonym. 
+
+```{r, eval = F}
+# For small sets of molecules, printing the table to the Console is fine
+print(results.dwnld)
+
+# For large sets, you may want to open another window
+View(results.dwnld)
+
+```
+
 
 Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
 
 When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
 
 The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+## Chemical descriptors
+
+Make sure you have [PaDEL-Descriptor](http://yapcwsoft.com/dd/padeldescriptor/) and [Java](https://www.java.com/en/download/help/index_installing.xml) installed. Open the executable .jar file in the PaDEL-Descriptor folder (this doesn't have to be downloaded in the cdap folder, but it might make it easier). Check off the boxes to match the example interface below. Also, notice that *Max. running time per molecule* has been assigned to 200,000 milliseconds. This will prevent the software from stalling for too long on molecules. 
+
+![](examples/interface.png)
+
+Go through the tabs on the top and **deselect** these descriptors:
+
+* 1D & 2D
+    - Autocorrelation
+    - BaryszMatrix
+    - BCUT
+    - BurdenModifiedEigenvalues
+    - ChiChain
+    - ChiCluster
+    - ChiPathCluster
+    - ChiPath
+    - DetourMatrix
+    - ExtendedTopochemicalAtom
+    - InformationContent
+    - KappaShapeIndices
+    - TopologicalCharge
+    - TopologicalDistance Matrix
+    
+* 3D
+    - Autocorrelation3D
+    
+* Fingerprints
+    - PubchemFingerprinter
+    - Additionally, **select** the box *SubstructureFingerprinterCount*
+
+Going back to the *General* tab, point *Molecules directory/file* to the folder with all the guest molecules. If you're getting to this step from CACTUS, select the folder named "guests" created in that process. In *Descriptor output file*, select the cdap folder and add "desc.csv" as the file name. 
+
+## Cleaning the descriptors
+
+### Pre-processing
+
+The descriptors have to be cleaned and sorted before being fed through the models. 
+
+### Applicability domain
+
+Before predictions can be made, we have to verify that the guests you're trying to feed into the models are similar to the molecules the model was trained on. This prevents extrapolation and potentially unreliable predictions.  
+
+## Predicting using the models
+
+

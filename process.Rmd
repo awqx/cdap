@@ -2,7 +2,7 @@
 title: "Using R for Cyclodextrin Affinity Prediction"
 output: 
   html_notebook:
-    theme: paper
+    theme: yeti
     toc: yes
   html_document:
     toc: yes
@@ -10,13 +10,21 @@ output:
 
 ## Overview
 
-Currently, this can only be used to predict for alpha- and beta-CD (this doesn't mean it's *impossible* to model gamma-CD, but the model is still in the works). The value returned by the code is the change in Gibbs free energy (often abbreviated as dG of DelG) of guest-host complexation. 
+The process for obtaining affinity predictions follows these overarching steps:
+
+
+![](examples/workflow.png)
+
+
+All the steps except using PaDEL-Descriptor are built into the script file `cdap.R`. Fortunately, PaDEL-Descriptor is fairly intuitive, and everything you need to do is detailed [here](#chemical-descriptors)
+
+Currently, this can only be used to predict for alpha- and beta-CD. The value returned by the code is the change in Gibbs free energy (often abbreviated as dG of DelG) of guest-host complexation. 
 
 The code used to actually build the models can be found in the repository [wip-cactus](https://github.com/awqx/wip-cactus). Don't mind the name -- it's a leftover from early steps in the QSAR building process. 
 
 ## Setting up
 
-Make sure you have RStudio and R installed. Going to the main page for the GitHub repository, click the green button that says **Clone or Download** and sleect the option **Download ZIP**. Extract the files somewhere convenient, and open up the script `cdap.R`. You'll notice that some lines are commented out (i.e., they are preceded by a **#**) and will not run on their own. As you follow through this guide, uncomment these lines as necessary.
+Make sure you have RStudio and R installed. On the main page for [cdap](https://github.com/awqx/cdap), click the green button that says **Clone or Download** and select **Download ZIP**. Extract the files somewhere convenient, and open up the script `cdap.R`. You'll notice that some lines are commented out (i.e., they are preceded by a **#**) and will not run on their own. As you follow through this guide, uncomment these lines as necessary.
 
 The first executable line should be `getwd()`. This will print a filepath to the console -- make sure it's the filepath of the cdap folder. If not, use `setwd("example/example")` to set the working directory to the cdap folder. The next couple lines look something like `source("example.R")`. These will read functions and install the necessary R packages. 
 
@@ -31,17 +39,18 @@ source("qsar.R")
 
 ## Structural files
 
-If you already have the structural files for the molecules you want to test, skip to [Chemical descriptors](#anchor)
+If you already have the structural files for the molecules you want to test, skip to [Chemical descriptors](#chemical-descriptors)
 
 ### Names
 
 First, the names of the guest molecules you want to evaluate have to be assigned to a vector. In the easiest scenario, you have only a couple of easily typable names. Assign these to the variable `guests`.
 
 ```{r, eval = F}
-guests <- c("acetominophen", "triamcinolone", "dexamethasone")
+guests <- c("cinnarizine", "diethylamine", "acetaminophen", "piroxicam")
 
 # If there's only one name you need, no need to put it into a vector
-guests <- "metformin"
+guests <- "metformin" # Don't mind that "guests" is technically plural
+
 ```
 
 If there are many molecules, it may be easier to use `read.csv`. Write or copy the molecule names into the first column of an Excel document under the header "guests". Save the file as guests.csv (in the cdap folder) and read it into R.
@@ -79,7 +88,7 @@ results.dwnld <-
 
 ```
 
-Take a look at `results.dwnld` to see if any molecules failed to process. If some failed, try again using a chemical synonym. 
+Take a look at `results.dwnld` to see if any molecules failed to process. If some failed, try again using a chemical synonym. Re-running `download.cactus.results` will not delete any of the existing molecular structure files. 
 
 ```{r, eval = F}
 # For small sets of molecules, printing the table to the Console is fine
@@ -88,24 +97,39 @@ print(results.dwnld)
 # For large sets, you may want to open another window
 View(results.dwnld)
 
+# Alternatively, you can retrieve a list of molecules that did not download
+guests.failed <- results.dwnld %>% filter(downloaded == "no") %>% .$guest
+
+# To try again, assign a new variable with the modified names
+# For example, if the original list of guests failed to download "neomyecin", 
+# "doxicycline", or "Sumycin", assign the corrected names to guests2
+guests2 <- c("neomycin", "doxycycline", "tetracycline")
+results.dwnld2 <-
+  do.call(
+    rbind,
+    lapply(
+      guests2,
+      download.cactus.results,
+      path = filepath,
+      chemical.format = "SDF"
+    )
+  )
+
 ```
-
-
-Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
-
-When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
-
-The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
 
 ## Chemical descriptors
 
-Make sure you have [PaDEL-Descriptor](http://yapcwsoft.com/dd/padeldescriptor/) and [Java](https://www.java.com/en/download/help/index_installing.xml) installed. Open the executable .jar file in the PaDEL-Descriptor folder (this doesn't have to be downloaded in the cdap folder, but it might make it easier). Check off the boxes to match the example interface below. Also, notice that *Max. running time per molecule* has been assigned to 200,000 milliseconds. This will prevent the software from stalling for too long on molecules. 
+### Calculation using PaDEL
+
+Make sure you have [PaDEL-Descriptor](http://yapcwsoft.com/dd/padeldescriptor/) and [Java](https://www.java.com/en/download/help/index_installing.xml) installed. Open the executable .jar file in the PaDEL-Descriptor folder (this doesn't have to be downloaded in the cdap folder, but it might make it easier). Check off the boxes to match the example interface below. Note that "Max. running time per molecule" has been assigned to 200,000 milliseconds. This will prevent the software from stalling for too long on molecules. 
+
+If you didn't go through CIR, depending on how your molecular structure file is saved, the last box -- "Use filename as molecule name" -- may or may not need to be checked off. If multiple molecules are stored in a single .SDF, uncheck the box. 
 
 ![](examples/interface.png)
 
 Go through the tabs on the top and **deselect** these descriptors:
 
-* 1D & 2D
+* *1D & 2D*
     - Autocorrelation
     - BaryszMatrix
     - BCUT
@@ -121,25 +145,97 @@ Go through the tabs on the top and **deselect** these descriptors:
     - TopologicalCharge
     - TopologicalDistance Matrix
     
-* 3D
+* *3D*
     - Autocorrelation3D
     
-* Fingerprints
+* *Fingerprints*
     - PubchemFingerprinter
-    - Additionally, **select** the box *SubstructureFingerprinterCount*
+    - Additionally, **select** the box "SubstructureFingerprinterCount"
 
-Going back to the *General* tab, point *Molecules directory/file* to the folder with all the guest molecules. If you're getting to this step from CACTUS, select the folder named "guests" created in that process. In *Descriptor output file*, select the cdap folder and add "desc.csv" as the file name. 
+Going back to the *General* tab, point "Molecules directory/file" to the folder with all the guest molecules. (If you're getting to this step from CACTUS, select the folder named "guests"). In "Descriptor output file", select the cdap folder and add "desc.csv" as the file name. 
 
-## Cleaning the descriptors
+### Reading the descriptors into R
 
-### Pre-processing
+After the results are imported into the variable `desc`, we can begin using the predictive models. Once you have read the descriptors into R check to make sure that the table contains 1377 variables. You can see `desc` in the "Environment" tab in the upper right of the RStudio window, but **do not** click, open, or view the variable as the large size of the table may cause RStudio to crash and/or the R session to abort.
 
-The descriptors have to be cleaned and sorted before being fed through the models. 
+```{r}
 
-### Applicability domain
+desc <- read.csv("desc.csv", header = T) %>% 
+  rename(guest = Name) %>%
+  mutate(guest = as.character(guest))
 
-Before predictions can be made, we have to verify that the guests you're trying to feed into the models are similar to the molecules the model was trained on. This prevents extrapolation and potentially unreliable predictions.  
+```
 
 ## Predicting using the models
+
+For predicting complexation with alpha-CD, use the function`predict.alpha`. For beta-CD, use `predict.beta`. 
+
+```{r}
+
+# Predict dG values for alpha- and beta-CD
+alpha.results <- predict.alpha(desc)
+beta.results <- predict.beta(desc)
+
+```
+
+These two functions actually return a list containing three components. The first component is a simple table with the names of the guest molecules and their predicted dG. 
+```{r}
+alpha.results[[1]]
+```
+
+```{r, echo = F}
+data <- alpha.results[[1]]
+knitr::kable(data, caption = "Alpha-CD results")
+```
+
+The second goes into more detail, specifying the predicted values for each QSAR. 
+
+```{r}
+alpha.results[[2]]
+```
+
+```{r, echo = F}
+data <- alpha.results[[2]]
+knitr::kable(data, caption = "Alpha-CD full predictions")
+
+```
+
+The third is a vector containing outliers, or molecules that fall outside of the applicability domain of at least one of the QSARs. These molecules are too dissimilar to the molecules the models were trained on to produce reliable predictions. As you can see, cinnarizine fails to be predicted accurately by both the alpha-CD and beta-CD models. 
+
+```{r}
+alpha.results[[3]]
+beta.results[[3]]
+```
+
+We can visualize the results by combining the datasets and graphing them. 
+
+```{r}
+alpha.dg <- alpha.results[[1]] %>% .[order(.$dG), ]
+beta.dg <- beta.results[[1]] %>% .[order(.$dG), ]
+
+combined.dg <- rbind(
+  mutate(alpha.dg, host = "alpha"), 
+  mutate(beta.dg, host = "beta")
+)
+
+ggplot(combined.dg, aes(x = guests, y = dG, fill = host)) + 
+  geom_bar(stat = "identity", position = "dodge") + 
+  theme_bw() + 
+  labs(x = "Guest molecules", 
+       y = "Predicted dG, kJ/mol", 
+       fill = "CD type", 
+       title = "Ensemble QSAR predictions")
+```
+
+To save the data, you can write them into a .RDS (for analysis by R later) or a .csv.
+
+```{r, eval = F}
+saveRDS(combined.dg, "results.RDS")
+write.csv(combined.dg, "results.csv", row.names = F)
+```
+
+## General warnings
+
+These models are not able to handle massive molecules such as proteins, polymers, etc. These will almost always fall outside of the applicability domain. 
 
 

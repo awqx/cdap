@@ -55,7 +55,9 @@ predict.alpha <- function(df) {
       desc.pp <- data.matrix(desc.pp)
       pred <- predict.glmnet(qsar, desc.pp, 
                              s = tail(qsar$lambda, n = 1))
-    } else
+    } else if (str_detect(name.models[n], "pls"))
+      pred <- predict(qsar, desc.pp, ncomp = 8)
+    else
       pred <- predict(qsar, desc.pp)
     results.qsar <- data.frame(guests, pred) 
     colnames(results.qsar)[2] <- name.models[n]
@@ -92,7 +94,9 @@ predict.beta <- function(df) {
       desc.pp <- data.matrix(desc.pp)
       pred <- predict.glmnet(qsar, desc.pp, 
                              s = tail(qsar$lambda, n = 1))
-    } else
+    }  else if (str_detect(name.models[n], "pls"))
+      pred <- predict(qsar, desc.pp, ncomp = 25)
+    else
       pred <- predict(qsar, desc.pp)
     results.qsar <- data.frame(guests, pred) 
     colnames(results.qsar)[2] <- name.models[n]

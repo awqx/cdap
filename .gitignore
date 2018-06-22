@@ -7,3 +7,5 @@ guests/
 desc.csv
 results.csv
 results.RDS
+
+testing.R

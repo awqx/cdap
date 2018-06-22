@@ -2,7 +2,7 @@
 title: "Using R for Cyclodextrin Affinity Prediction"
 output: 
   html_notebook:
-    theme: yeti
+    theme: lumen
     toc: yes
   html_document:
     toc: yes
@@ -11,7 +11,6 @@ output:
 ## Overview
 
 The process for obtaining affinity predictions follows these overarching steps:
-
 
 ![](examples/workflow.png)
 
@@ -183,18 +182,18 @@ These two functions actually return a list containing three components. The firs
 alpha.results[[1]]
 ```
 
-```{r, echo = F}
+```{r, echo = F, results = "asis"}
 data <- alpha.results[[1]]
 knitr::kable(data, caption = "Alpha-CD results")
 ```
 
-The second goes into more detail, specifying the predicted values for each QSAR. 
+The second goes into more detail, specifying the predicted values for each QSAR. Currently, there are three working models: GLMNet, an SVM with a polynomial kernel, and a Random Forest.
 
 ```{r}
 alpha.results[[2]]
 ```
 
-```{r, echo = F}
+```{r, echo = F, results = "asis"}
 data <- alpha.results[[2]]
 knitr::kable(data, caption = "Alpha-CD full predictions")
 
